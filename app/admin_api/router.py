@@ -93,13 +93,13 @@ async def list_canonical_products(
 
 @admin_router.get("/products/{product_id}")
 async def get_canonical_product_details(
-    product_id: uuid.UUID,
+    product_id: str,
     session: AsyncSession = Depends(get_db_session),
 ):
     """Detailed canonical product profile with mapped store offers and price logs."""
     stmt = (
         select(CanonicalProduct)
-        .where(CanonicalProduct.id == product_id)
+        .where(CanonicalProduct.id == str(product_id))
         .options(
             selectinload(CanonicalProduct.mappings).joinedload(OfferCanonicalMapping.raw_offer),
             selectinload(CanonicalProduct.price_records),
@@ -118,7 +118,7 @@ async def get_canonical_product_details(
             {
                 "mapping_id": str(mapping.id),
                 "raw_offer_id": str(offer.id),
-                "store_code": offer.store_id,
+                "store_code": str(offer.store_id),
                 "external_id": offer.external_id,
                 "raw_title": offer.raw_title,
                 "raw_price_regular": float(offer.raw_price_regular),
@@ -127,7 +127,7 @@ async def get_canonical_product_details(
                 "product_url": offer.product_url,
                 "raw_image_url": offer.raw_image_url,
                 "raw_ean": offer.raw_ean,
-                "match_tier": mapping.match_tier.value,
+                "match_tier": str(mapping.match_tier.value if hasattr(mapping.match_tier, 'value') else mapping.match_tier),
                 "confidence_score": float(mapping.confidence_score),
                 "is_manual_lock": mapping.is_manual_lock,
             }
@@ -308,7 +308,7 @@ async def get_mappings_for_review(
     return [
         {
             "mapping_id": str(m.id),
-            "match_tier": m.match_tier.value,
+            "match_tier": str(m.match_tier.value if hasattr(m.match_tier, 'value') else m.match_tier),
             "confidence_score": float(m.confidence_score),
             "offer": {
                 "id": str(m.raw_offer.id),

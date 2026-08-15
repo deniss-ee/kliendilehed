@@ -1,0 +1,65 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --background: #f8fafc;
+    --foreground: #0f172a;
+    --card: #ffffff;
+    --card-foreground: #0f172a;
+    --primary: #0284c7;
+    --primary-foreground: #ffffff;
+    --border: #e2e8f0;
+  }
+
+  body {
+    background-color: var(--background);
+    color: var(--foreground);
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+  }
+}
+
+/* Custom store brand accents */
+.store-selver {
+  color: #d9251d;
+}
+.bg-store-selver {
+  background-color: #d9251d;
+}
+.border-store-selver {
+  border-color: #d9251d;
+}
+
+.store-rimi {
+  color: #e30613;
+}
+.bg-store-rimi {
+  background-color: #e30613;
+}
+
+.store-prisma {
+  color: #00823b;
+}
+.bg-store-prisma {
+  background-color: #00823b;
+}
+
+.store-coop {
+  color: #004b92;
+}
+.bg-store-coop {
+  background-color: #004b92;
+}
+
+.store-maxima {
+  color: #002d72;
+}
+.bg-store-maxima {
+  background-color: #002d72;
+}
+
+.store-lidl {
+  color: #0050aa;
+}
+.bg-store-lidl {
+  background-color: #0050aa;
+}

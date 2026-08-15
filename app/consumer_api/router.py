@@ -31,7 +31,7 @@ consumer_router = APIRouter(prefix="/api", tags=["Consumer Portal & Deal Tracker
 async def search_products(
     query: Optional[str] = Query(None, description="Search keyword, brand, or EAN"),
     brand: Optional[str] = Query(None, description="Filter by brand"),
-    store: Optional[str] = Query(None, description="Filter by store code (e.g. SELVER, RIMI)"),
+    store: Optional[str] = Query(None, description="Filter by single store or comma-separated store codes (e.g. SELVER,PRISMA)"),
     on_sale_only: bool = Query(False, description="Filter only items currently on discount"),
     sort_by: str = Query("relevance", enum=["relevance", "price_asc", "price_desc", "name"]),
     page: int = Query(1, ge=1),
@@ -39,6 +39,8 @@ async def search_products(
     session: AsyncSession = Depends(get_db_session),
 ):
     """Public search for grocery items with side-by-side price comparison."""
+    selected_stores = [s.strip().upper() for s in store.split(",") if s.strip()] if store else []
+
     stmt = (
         select(CanonicalProduct)
         .options(
@@ -49,12 +51,25 @@ async def search_products(
     )
 
     if query:
-        search_filter = or_(
-            CanonicalProduct.name_et.ilike(f"%{query}%"),
-            CanonicalProduct.brand.ilike(f"%{query}%"),
-            CanonicalProduct.ean.ilike(f"%{query}%"),
-        )
-        stmt = stmt.where(search_filter)
+        # Support multiple space/comma separated keywords (OR match)
+        keywords = [k.strip() for k in query.replace(",", " ").split() if k.strip()]
+        if len(keywords) > 1:
+            or_clauses = []
+            for kw in keywords:
+                or_clauses.extend([
+                    CanonicalProduct.name_et.ilike(f"%{kw}%"),
+                    CanonicalProduct.brand.ilike(f"%{kw}%"),
+                    CanonicalProduct.ean.ilike(f"%{kw}%"),
+                ])
+            stmt = stmt.where(or_(*or_clauses))
+        else:
+            stmt = stmt.where(
+                or_(
+                    CanonicalProduct.name_et.ilike(f"%{query}%"),
+                    CanonicalProduct.brand.ilike(f"%{query}%"),
+                    CanonicalProduct.ean.ilike(f"%{query}%"),
+                )
+            )
 
     if brand:
         stmt = stmt.where(CanonicalProduct.brand.ilike(f"%{brand}%"))
@@ -83,6 +98,13 @@ async def search_products(
             if not offer or not offer.is_available:
                 continue
 
+            raw_code = offer.store.code
+            st_code_str = str(raw_code.value if hasattr(raw_code, 'value') else raw_code).upper()
+
+            # If store filter is active, only include matching stores
+            if selected_stores and st_code_str not in selected_stores:
+                continue
+
             eff_price = offer.raw_price_loyalty or offer.raw_price_discount or offer.raw_price_regular
             if eff_price < min_price:
                 min_price = eff_price
@@ -93,7 +115,7 @@ async def search_products(
 
             offers_by_store.append(
                 {
-                    "store_code": offer.store.code.value,
+                    "store_code": st_code_str,
                     "store_name": offer.store.name,
                     "price_regular": float(offer.raw_price_regular),
                     "price_discount": float(offer.raw_price_discount) if offer.raw_price_discount else None,
@@ -104,6 +126,10 @@ async def search_products(
                     "product_url": offer.product_url,
                 }
             )
+
+        # If store filter is active and this product has no matching store offers, skip it
+        if selected_stores and len(offers_by_store) == 0:
+            continue
 
         if on_sale_only and not has_discount:
             continue
@@ -139,7 +165,7 @@ async def get_product_comparison_profile(
     """Detailed multi-store price comparison and unit pricing for a single product."""
     stmt = (
         select(CanonicalProduct)
-        .where(CanonicalProduct.id == product_id)
+        .where(CanonicalProduct.id == str(product_id))
         .options(
             selectinload(CanonicalProduct.mappings)
             .joinedload(OfferCanonicalMapping.raw_offer)
@@ -161,7 +187,7 @@ async def get_product_comparison_profile(
 
         offers.append(
             {
-                "store_code": o.store.code.value,
+                "store_code": str(o.store.code.value if hasattr(o.store.code, 'value') else o.store.code),
                 "store_name": o.store.name,
                 "store_base_url": o.store.base_url,
                 "title_in_store": o.raw_title,
@@ -206,7 +232,7 @@ async def get_product_price_history(
     """Time-series price history across stores for charts."""
     stmt = (
         select(PriceHistory)
-        .where(PriceHistory.canonical_product_id == product_id)
+        .where(PriceHistory.canonical_product_id == str(product_id))
         .options(joinedload(PriceHistory.store))
         .order_by(PriceHistory.recorded_at.asc())
     )
@@ -215,7 +241,7 @@ async def get_product_price_history(
 
     return [
         {
-            "store_code": r.store.code.value,
+            "store_code": str(r.store.code.value if hasattr(r.store.code, 'value') else r.store.code),
             "store_name": r.store.name,
             "price_regular": float(r.price_regular),
             "price_discount": float(r.price_discount) if r.price_discount else None,
@@ -266,7 +292,7 @@ async def get_top_deals(
             {
                 "raw_offer_id": str(o.id),
                 "canonical_product_id": str(canonical.id) if canonical else None,
-                "store_code": o.store.code.value,
+                "store_code": str(o.store.code.value if hasattr(o.store.code, 'value') else o.store.code),
                 "store_name": o.store.name,
                 "title": canonical.name_et if canonical else o.raw_title,
                 "regular_price": float(o.raw_price_regular),
